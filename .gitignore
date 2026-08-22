@@ -1,0 +1,28 @@
+# Build outputs
+build/
+app/build/
+.gradle/
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Kotlin
+*.class
+*.dex
+*.apk
+
+# Signing (never commit keys or passwords)
+*.jks
+keystore.properties
+
+# Local tool metadata
+.claude/
+.mimocode/
+.workbuddy/
+.kotlin/

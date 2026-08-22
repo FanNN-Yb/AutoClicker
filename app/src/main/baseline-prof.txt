@@ -1,0 +1,20 @@
+# 手写 Baseline Profile：覆盖冷启动热路径，安装后系统预编译这些方法，
+# 消除启动阶段 JIT 编译导致的掉帧。release 构建时由 AGP 自动合并进 APK。
+
+# 应用自身代码：MainActivity / Compose 界面 / 组件 / 服务初始化
+HSPLcom/example/autoclicker/**->**(**)**
+
+# Liquid Glass 背景（backdrop）：首帧渲染的核心路径
+HSPLcom/kyant/backdrop/**->**(**)**
+
+# 连续圆角形状（Capsule 等）
+HSPLcom/kyant/shapes/**->**(**)**
+
+# iOS 风格橡皮筋回弹（首页 overscroll 工厂在启动时创建）
+HSPLio/github/fannn_yb/rubberband/**->**(**)**
+
+# 协程基础设施（启动期间大量使用）
+HSPLkotlinx/coroutines/**->**(**)**
+
+# MMKV 初始化（App Startup 阶段调用）
+HSPLcom/tencent/mmkv/**->**(**)**
