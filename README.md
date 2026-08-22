@@ -18,7 +18,7 @@
 
 ## 下载安装
 
-前往 [Releases](https://github.com/FanNN-Yb/AutoClicker-Download/releases) 下载最新 APK。
+前往 [Releases](https://github.com/FanNN-Yb/AutoClicker/releases) 下载最新 APK。
 
 ## 本地构建
 
