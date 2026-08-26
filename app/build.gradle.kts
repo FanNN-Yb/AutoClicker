@@ -7,7 +7,7 @@ plugins {
     id("com.mikepenz.aboutlibraries.plugin")
 }
 
-// 签名配置从根目录 keystore.properties 读取（不入库），缺失时 release 使用 debug 签名
+// 签名配置从根目录 keystore.properties 读取（不入库），缺失�?release 使用 debug 签名
 val keystoreProperties = Properties().apply {
     val f = rootProject.file("keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -96,25 +96,25 @@ dependencies {
         // Backdrop (Liquid Glass effects)
     implementation("io.github.kyant0:backdrop:2.0.0-rc01")
 
-    // RubberBand — iOS 风格橡皮筋（弹性回弹）动画
-    implementation("com.github.FanNN-Yb:RubberBand:1.0.0")
+    // RubberBand - iOS 式橡皮筋回弹
+    implementation("com.github.FanNN-Yb:Rubber-Band:v1")
 
-    // MMKV — fast key-value storage (replaces SharedPreferences)
+    // MMKV �?fast key-value storage (replaces SharedPreferences)
     implementation("com.tencent:mmkv:2.0.2")
 
-    // App Startup — optimized component initialization
+    // App Startup �?optimized component initialization
     implementation("androidx.startup:startup-runtime:1.2.0")
 
     // Shapes - continuous rounded corner shapes (Capsule)
     implementation("io.github.kyant0:shapes:1.2.0")
 
-    // Profile Installer — pre-compiles hot code paths for faster cold start
+    // Profile Installer �?pre-compiles hot code paths for faster cold start
     implementation("androidx.profileinstaller:profileinstaller:1.4.0")
 
-    // Immutable collections — Compose skips recomposition for @Immutable lists
+    // Immutable collections �?Compose skips recomposition for @Immutable lists
     implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable:0.4.0")
 
-    // AboutLibraries — 开源库致谢
+    // AboutLibraries �?开源库致谢
     implementation("com.mikepenz:aboutlibraries-compose-m3:11.6.2")
 
     testImplementation("junit:junit:4.13.2")

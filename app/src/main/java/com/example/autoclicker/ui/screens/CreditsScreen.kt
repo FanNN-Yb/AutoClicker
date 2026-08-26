@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -59,7 +60,7 @@ import com.example.autoclicker.ui.components.LiquidGlassIconButton
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.shapes.RoundedCornerStyle
 import com.kyant.shapes.RoundedRectangle
-import io.github.fannn_yb.rubberband.bounceScrollable
+import io.github.fannn_yb.rubberband.RubberBandContainer
 
 /**
  * 致谢条目，包含名称和描述，点击可打开对应链接。
@@ -136,10 +137,10 @@ fun CreditsScreen(
         modifier = modifier
             .fillMaxSize()
             .background(bg)
-            .bounceScrollable(canScroll = { listState.canScrollForward || listState.canScrollBackward })
     ) {
         val isLandscape = maxWidth > maxHeight
         val horizontalPadding = if (isLandscape) ((maxWidth - 360.dp) / 2f).coerceAtLeast(20.dp) else 20.dp
+        RubberBandContainer {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -215,6 +216,7 @@ fun CreditsScreen(
                 Spacer(modifier = Modifier.height(80.dp))
             }
         }
+        } // RubberBandContainer
 
         // 渐变遮罩
         val maskVisualHeightPx = with(density) { maskVisualHeightDp.toPx() }

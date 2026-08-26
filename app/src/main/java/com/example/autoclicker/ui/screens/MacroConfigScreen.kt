@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -74,7 +75,7 @@ import com.example.autoclicker.MacroConfig
 import com.example.autoclicker.R
 import com.example.autoclicker.ThemeSettings
 import com.example.autoclicker.ui.components.GlasenseSwipeable
-import io.github.fannn_yb.rubberband.bounceScrollable
+import io.github.fannn_yb.rubberband.RubberBandContainer
 import com.example.autoclicker.ui.components.SwipeableActionButton
 import com.example.autoclicker.ui.components.rememberSwipeableListState
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -173,12 +174,12 @@ fun MacroConfigScreen(
         modifier = modifier
             .fillMaxSize()
             .background(bg)
-            .bounceScrollable(canScroll = { listState.canScrollForward || listState.canScrollBackward })
     ) {
         val isLandscape = maxWidth > maxHeight
         val horizontalPadding = if (isLandscape) ((maxWidth - 360.dp) / 2f).coerceAtLeast(24.dp) else 24.dp
         // 页面内容（供 backdrop 录制）
         Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
+        RubberBandContainer {
         // ===== LazyColumn =====
         LazyColumn(
             state = listState,
@@ -341,6 +342,7 @@ fun MacroConfigScreen(
                 }
             }
         }
+        } // RubberBandContainer
         } // 关闭内层 layerBackdrop Box（只录 LazyColumn；遮罩/标题栏放到外层，与 overscroll 各持独立 layer）
 
         // ===== Gradient overlay at top =====（backdrop 的兄弟节点）

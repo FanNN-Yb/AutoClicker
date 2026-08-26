@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -70,7 +71,7 @@ import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.emptyBackdrop
 import com.kyant.shapes.RoundedCornerStyle
 import com.kyant.shapes.RoundedRectangle
-import io.github.fannn_yb.rubberband.bounceScrollable
+import io.github.fannn_yb.rubberband.RubberBandContainer
 
 @Composable
 fun SettingsScreen(
@@ -151,10 +152,10 @@ fun SettingsScreen(
         modifier = modifier
             .fillMaxSize()
             .background(bg)
-            .bounceScrollable(canScroll = { listState.canScrollForward || listState.canScrollBackward })
     ) {
         val isLandscape = maxWidth > maxHeight
         val horizontalPadding = if (isLandscape) ((maxWidth - 360.dp) / 2f).coerceAtLeast(20.dp) else 20.dp
+        RubberBandContainer {
         LazyColumn(
             state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(
                 start = horizontalPadding, end = horizontalPadding, top = maskHeightDp + 12.dp, bottom = 120.dp
@@ -328,6 +329,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(80.dp))
             }
         }
+        } // RubberBandContainer
 
         // ===== Gradient overlay =====
         val maskVisualHeightPx = with(density) { maskVisualHeightDp.toPx() }
