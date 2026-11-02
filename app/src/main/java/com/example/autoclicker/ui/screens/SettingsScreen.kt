@@ -55,6 +55,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -114,6 +115,14 @@ fun SettingsScreen(
     val themeAuto = ThemeSettings.themeAuto
 
     val density = LocalDensity.current
+
+    // 版本号从已安装的包里读，别再写死字符串（写死过 1.0.0，改 gradle 版本号不会同步）
+    val context = LocalContext.current
+    val appVersion = remember(context) {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull().orEmpty()
+    }
 
     // 橡皮筋状态提升到页面级，供容器外的顶栏玻璃/模糊读取
     val rubberState = rememberRubberBandState()
@@ -335,7 +344,7 @@ fun SettingsScreen(
                 SettingsCard(cardBg, cardBorder) {
                     SettingsInfoRow(
                         title = "版本",
-                        value = "1.0.0",
+                        value = appVersion,
                         isLight = isLight,
                         showDivider = showDividers,
                         dividerColor = dividerColor
