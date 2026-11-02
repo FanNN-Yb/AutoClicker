@@ -52,27 +52,60 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import com.kyant.shapes.RoundedCornerStyle
 import com.kyant.shapes.RoundedRectangle
-import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
+import io.github.neoruaa.glasmio.glass.render.Backdrop
+import io.github.neoruaa.glasmio.glass.render.drawBackdrop
+import io.github.neoruaa.glasmio.glass.render.effects.blur
+import io.github.neoruaa.glasmio.glass.render.effects.lens
+import io.github.neoruaa.glasmio.glass.render.effects.vibrancy
+import io.github.neoruaa.glasmio.glass.GlassEmphasis
+import io.github.neoruaa.glasmio.ui.GlasmioIconButton
 import com.example.autoclicker.ThemeSettings
+import androidx.compose.ui.unit.Dp
 import kotlin.math.absoluteValue
 import kotlin.math.sin
+
+/** 轮子每行高度 */
+internal val NumberPickerItemHeight = 40.dp
+
+/** 轮子最大旋转角度（±90°） */
+private val NumberPickerMaxAngleRad = (Math.PI / 2).toFloat()
+
+/** 矮屏（横屏等）减少可见行数，避免弹窗总高超出屏幕 */
+internal fun numberPickerVisibleCount(screenHeightDp: Int): Int =
+    if (screenHeightDp < 480) 5 else 7
+
+/**
+ * 轮子实际占用高度。**不是** rows × 40dp —— 每行按角度映射到圆柱面上，
+ * 首尾行只落在 sin(halfCount / (halfCount + 1) × 90°) × radius 处，
+ * 所以比线性高度矮一截（7 行 → 228dp，5 行 → 172dp）。
+ */
+internal fun numberPickerWheelHeight(visibleCount: Int): Dp {
+    val halfCount = visibleCount / 2
+    val item = NumberPickerItemHeight.value
+    val radius = (halfCount + 1) * item / NumberPickerMaxAngleRad
+    val halfArc = (sin(halfCount.toFloat() / (halfCount + 1) * NumberPickerMaxAngleRad) * radius).absoluteValue
+    return (item + halfArc * 2f).dp
+}
+
+/** Picker 内容高度：头部（8 顶部内距 + 44 按钮）+ 16 间距 + 轮子 */
+internal fun numberPickerContentHeight(visibleCount: Int): Dp =
+    68.dp + numberPickerWheelHeight(visibleCount)
+
+/** GlasmioMenu 面板高度：内容 + 菜单自身的 10dp 上下内边距 */
+internal fun numberPickerMenuHeight(visibleCount: Int): Dp =
+    numberPickerContentHeight(visibleCount) + 20.dp
 
 /**
  * iOS 风格的 3D 轮子数字选择器
  */
 @Composable
-fun NumberPicker(
-    value: Float,
+fun NumberPicker(    value: Float,
     onValueChange: (Float) -> Unit,
     range: List<Float>,
     label: String,
     isLight: Boolean,
     modifier: Modifier = Modifier,
-    backdropParam: com.kyant.backdrop.Backdrop? = null
+    backdropParam: io.github.neoruaa.glasmio.glass.render.Backdrop? = null
 ) {
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
@@ -97,9 +130,9 @@ fun NumberPicker(
 
     // 矮屏（横屏手机等）减少可见行数，避免弹窗总高超出屏幕
     val screenHeightDp = LocalConfiguration.current.screenHeightDp
-    val visibleCount = if (screenHeightDp < 480) 5 else 7
+    val visibleCount = numberPickerVisibleCount(screenHeightDp)
     val halfCount = visibleCount / 2
-    val itemHeight = 40.dp
+    val itemHeight = NumberPickerItemHeight
     val itemHeightPx = with(density) { itemHeight.toPx() }
 
     val maxRotationDeg = 90f
@@ -250,7 +283,7 @@ fun NumberPickerInline(
     label: String,
     isLight: Boolean,
     modifier: Modifier = Modifier,
-    backdrop: com.kyant.backdrop.Backdrop? = null,
+    backdrop: io.github.neoruaa.glasmio.glass.render.Backdrop? = null,
     cornerAnimProgress: Float = 0f,
     scaleAnim: Float = 1f,
     bounceAnim: Float = 1f
@@ -303,7 +336,7 @@ fun NumberPickerInline(
             range = range,
             label = label,
             isLight = isLight,
-            backdrop = backdrop ?: com.kyant.backdrop.backdrops.emptyBackdrop()
+            backdrop = backdrop ?: io.github.neoruaa.glasmio.glass.render.backdrops.emptyBackdrop()
         )
     }
 }
@@ -332,24 +365,23 @@ fun NumberPickerInlineContent(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 22.dp),  // 卡片左右边距 = 圆角44dp - 按钮半宽22dp
+            .padding(horizontal = 22.dp),  // 左右边距 = 按钮半宽，按钮完整落在卡片内
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // 头部：SpaceBetween 模式下按钮自然位于左右两端
-        // 22dp 的 Column padding 使按钮中心正好在 44dp(=圆角半径)处，与圆角同心
-        // padding(top=18dp) 将按钮垂直下移使其竖直中心对齐圆角圆心（44dp - 4dp - 22dp = 18dp）
+        // 弹窗圆角已改成 demo 菜单的 34dp，按钮竖直中心对齐圆角圆心（34dp - 4dp - 22dp = 8dp）
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 18.dp),
+                .padding(top = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             // 关闭按钮 — 左上角
-            LiquidGlassIconButton(
+            GlasmioIconButton(
                 onClick = onCancel,
                 backdrop = backdrop,
-                modifier = Modifier.size(buttonSize)
+                size = buttonSize
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.ic_xmark),
@@ -368,11 +400,11 @@ fun NumberPickerInlineContent(
             )
 
             // 确定按钮 — 右上角
-            LiquidGlassIconButton(
+            GlasmioIconButton(
                 onClick = { onValueChange(pendingValue); onConfirm() },
                 backdrop = backdrop,
-                tint = accentColor,
-                modifier = Modifier.size(buttonSize)
+                emphasis = GlassEmphasis.Prominent,
+                size = buttonSize
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.ic_checkmark),

@@ -19,13 +19,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
@@ -56,15 +61,17 @@ import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.runtime.CompositionLocalProvider
 import io.github.fannn_yb.rubberband.overscroll.rememberOffsetOverscrollFactory
-import com.example.autoclicker.ui.LiquidBottomTab
-import com.example.autoclicker.ui.LiquidBottomTabs
-import com.example.autoclicker.ui.LiquidSideTab
-import com.example.autoclicker.ui.LiquidSideTabs
+import com.example.autoclicker.ui.components.VerticalGlassNav
 import com.example.autoclicker.ui.screens.HomeScreen
+import com.example.autoclicker.ui.AppGlasmioTheme
+import io.github.neoruaa.glasmio.glass.GlasmioBackdropProvider
+import io.github.neoruaa.glasmio.icons.SfSymbol
+import io.github.neoruaa.glasmio.ui.GlasmioNavigationBar
+import io.github.neoruaa.glasmio.ui.GlasmioTabItem
 import com.example.autoclicker.ui.screens.MacroConfigScreen
 import com.example.autoclicker.ui.screens.SettingsScreen
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.layerBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
 import com.kyant.shapes.Capsule
 
 class MainActivity : ComponentActivity() {
@@ -113,6 +120,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            AppGlasmioTheme {
             MaterialTheme(colorScheme = colorScheme) {
                 val overscrollFactory = rememberOffsetOverscrollFactory(Orientation.Vertical)
                 CompositionLocalProvider(LocalOverscrollFactory provides overscrollFactory) {
@@ -194,6 +202,7 @@ class MainActivity : ComponentActivity() {
                 }
                 }
             }
+            }
         }
     }
 
@@ -256,8 +265,8 @@ fun MainScreen(
         selectedTabIndex = 0
     }
 
+    GlasmioBackdropProvider(backdrop = backdrop) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val navIsLandscape = maxWidth > maxHeight
         // 记录已访问过的 tab，首次访问后常驻内存不销毁
         val visitedTabs = remember { mutableStateOf(setOf(0)) }
         LaunchedEffect(selectedTabIndex) {
@@ -359,78 +368,48 @@ fun MainScreen(
             }
         }
 
-        // Navigation
+        // Navigation —— 横屏：右侧竖向玻璃栏（改造前那版的位置与造型）；竖屏：库的底部横条
+        val navIsLandscape = maxWidth > maxHeight
+        val navCompactProgress = remember { mutableFloatStateOf(0f) }
+        val navItems = remember {
+            listOf(
+                GlasmioTabItem(0, "首页", SfSymbol.House),
+                GlasmioTabItem(1, "宏配置", SfSymbol.Layers),
+                GlasmioTabItem(2, "设置", SfSymbol.Gearshape),
+            )
+        }
         if (navIsLandscape) {
-            // 横屏：右侧竖向导航
+            // 右上角被系统状态栏（刘海/信号电量）占着，右下角是空的，
+            // 纯粹居中会让整条侧栏看起来重心偏上。往下挪「半个状态栏高度」做视觉平衡，
+            // 高度从 WindowInsets 动态取，换机型/换挖孔都不用改代码。
+            val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+            val navShiftY = statusBarInset / 2
+
+            // 横屏：右侧竖向玻璃栏 —— 就是竖屏那条底栏整体转 90°，效果完全一致
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
+                    .offset(y = navShiftY)
                     .fillMaxHeight()
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                LiquidSideTabs(
-                    selectedTabIndex = { selectedTabIndex },
-                    onTabSelected = { selectedTabIndex = it },
+                VerticalGlassNav(
+                    items = navItems,
+                    selectedKey = selectedTabIndex,
+                    onSelected = { selectedTabIndex = it },
                     backdrop = backdrop,
-                    tabsCount = 3
-                ) {
-                    LiquidSideTab({ selectedTabIndex = 0 }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_house),
-                            contentDescription = "首页",
-                            modifier = Modifier.size(24.dp),
-                            tint = if (selectedTabIndex == 0) contentColor
-                            else contentDimColor
-                        )
-                        Text(
-                            "首页",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (selectedTabIndex == 0) contentColor
-                            else contentDimColor
-                        )
-                    }
-
-                    LiquidSideTab({ selectedTabIndex = 1 }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_slider),
-                            contentDescription = "宏配置",
-                            modifier = Modifier.size(24.dp),
-                            tint = if (selectedTabIndex == 1) contentColor
-                            else contentDimColor
-                        )
-                        Text(
-                            "宏配置",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (selectedTabIndex == 1) contentColor
-                            else contentDimColor
-                        )
-                    }
-
-                    LiquidSideTab({ selectedTabIndex = 2 }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_gear),
-                            contentDescription = "设置",
-                            modifier = Modifier.size(24.dp),
-                            tint = if (selectedTabIndex == 2) contentColor
-                            else contentDimColor
-                        )
-                        Text(
-                            "设置",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (selectedTabIndex == 2) contentColor
-                            else contentDimColor
-                        )
-                    }
-                }
+                    modifier = Modifier.fillMaxHeight(0.75f)
+                )
             }
 
-            // 弹窗时侧边栏遮罩
+            // 弹窗时侧栏遮罩（与侧栏同位置同尺寸）
             if (macroDimAlpha > 0.05f) {
                 val dimColor = if (isLightTheme) Color(0xFF29293A).copy(0.1f) else Color(0xFF121212).copy(0.56f)
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
+                        .offset(y = navShiftY)
                         .fillMaxHeight()
                         .padding(horizontal = 16.dp, vertical = 16.dp),
                     contentAlignment = Alignment.Center
@@ -438,7 +417,7 @@ fun MainScreen(
                     Box(
                         modifier = Modifier
                             .graphicsLayer { alpha = macroDimAlpha }
-                            .width(64.dp)
+                            .width(62.dp)
                             .fillMaxHeight(0.75f)
                             .clip(Capsule())
                             .background(dimColor)
@@ -450,72 +429,26 @@ fun MainScreen(
                 }
             }
         } else {
-            // 竖屏：底部横向导航
             Box(
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(0.85f)
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .navigationBarsPadding()
             ) {
-                LiquidBottomTabs(
-                    selectedTabIndex = { selectedTabIndex },
-                    onTabSelected = { selectedTabIndex = it },
+                GlasmioNavigationBar(
+                    items = navItems,
+                    selectedKey = selectedTabIndex,
+                    onSelected = { selectedTabIndex = it },
+                    onExpand = {},
+                    compactProgress = navCompactProgress,
+                    compactSize = 48.dp,
+                    modifier = Modifier.fillMaxWidth(),
                     backdrop = backdrop,
-                    tabsCount = 3,
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
-                        .navigationBarsPadding()
-                ) {
-                    LiquidBottomTab({ selectedTabIndex = 0 }) {
-
-                        Icon(
-                            painter = painterResource(R.drawable.ic_house),
-                            contentDescription = "首页",
-                            modifier = Modifier.size(28.dp),
-                            tint = if (selectedTabIndex == 0) contentColor
-                            else contentDimColor
-                        )
-                        Text(
-                            "首页",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (selectedTabIndex == 0) contentColor
-                            else contentDimColor
-                        )
-                    }
-
-                    LiquidBottomTab({ selectedTabIndex = 1 }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_slider),
-                            contentDescription = "宏配置",
-                            modifier = Modifier.size(28.dp),
-                            tint = if (selectedTabIndex == 1) contentColor
-                            else contentDimColor
-                        )
-                        Text(
-                            "宏配置",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (selectedTabIndex == 1) contentColor
-                            else contentDimColor
-                        )
-                    }
-
-                    LiquidBottomTab({ selectedTabIndex = 2 }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_gear),
-                            contentDescription = "设置",
-                            modifier = Modifier.size(28.dp),
-                            tint = if (selectedTabIndex == 2) contentColor
-                            else contentDimColor
-                        )
-                        Text(
-                            "设置",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (selectedTabIndex == 2) contentColor
-                            else contentDimColor
-                        )
-                    }
-                }
+                )
             }
 
-            // 弹窗时底部标签栏遮罩（和 LiquidBottomTabs 相同尺寸、相同位置）
+            // 弹窗时导航栏遮罩（与 Glasmio 导航栏同尺寸同位置）
             if (macroDimAlpha > 0.05f) {
                 val dimColor = if (isLightTheme) Color(0xFF29293A).copy(0.1f) else Color(0xFF121212).copy(0.56f)
                 Box(
@@ -525,9 +458,8 @@ fun MainScreen(
                         .padding(horizontal = 16.dp, vertical = 16.dp)
                         .navigationBarsPadding()
                         .graphicsLayer { alpha = macroDimAlpha }
-                        .height(64.dp)
+                        .height(62.dp)
                         .fillMaxWidth()
-                        .padding(0.dp)
                         .clip(Capsule())
                         .background(dimColor)
                         .clickable(
@@ -537,5 +469,6 @@ fun MainScreen(
                 )
             }
         }
+    }
     }
 }

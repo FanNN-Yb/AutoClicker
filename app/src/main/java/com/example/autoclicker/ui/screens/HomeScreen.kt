@@ -42,8 +42,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.example.autoclicker.ui.components.LiquidButton
+import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.layerBackdrop
+import io.github.neoruaa.glasmio.glass.GlassEmphasis
+import io.github.neoruaa.glasmio.ui.GlasmioButton
+import io.github.neoruaa.glasmio.ui.GlasmioButtonSize
 
 @Composable
 fun HomeScreen(
@@ -72,8 +75,16 @@ fun HomeScreen(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(bg)
     ) {
+        // 纯色背景层：单独一层只录背景色。
+        // 不能把 layerBackdrop 挂在整页根节点上——玻璃按钮在层内部采样自己所在的层，
+        // 渲染树会无限递归（RenderThread SIGSEGV）。
+        Box(
+            Modifier
+                .fillMaxSize()
+                .layerBackdrop(backdrop)
+                .background(bg)
+        )
         val isLandscape = maxWidth > maxHeight
         val topPadding = if (isLandscape) 80.dp else 220.dp
         val contentMaxWidth = if (isLandscape) 360.dp else androidx.compose.ui.unit.Dp.Unspecified
@@ -136,14 +147,12 @@ fun HomeScreen(
                 }
                 Spacer(modifier = Modifier.height(32.dp))
                 // Primary CTA - Start/Stop (Liquid Glass Button)
-                LiquidButton(
+                GlasmioButton(
                     onClick = onStartService,
                     backdrop = backdrop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    isInteractive = true,
-                    tint = accent
+                    modifier = Modifier.fillMaxWidth(),
+                    size = GlasmioButtonSize.Large,
+                    emphasis = GlassEmphasis.Prominent
                 ) {
                     Text(
                         text = if (isServiceRunning) "停止服务" else "启动悬浮窗",
@@ -154,13 +163,11 @@ fun HomeScreen(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 // Secondary link - Accessibility settings (Liquid Glass Button)
-                LiquidButton(
+                GlasmioButton(
                     onClick = onOpenAccessibility,
                     backdrop = backdrop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    tint = Color.Unspecified
+                    modifier = Modifier.fillMaxWidth(),
+                    size = GlasmioButtonSize.Large
                 ) {
                     Text(
                         text = "打开无障碍设置 >",

@@ -4,9 +4,9 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.Intent
 import android.graphics.Path
-import android.os.Build
-import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 class AutoClickerService : AccessibilityService() {
 
@@ -48,23 +48,45 @@ class AutoClickerService : AccessibilityService() {
     }
 
     /**
-     * 执行一次点击手势。
+     * 派发一次点击，**等它真的走完**才返回。
+     *
+     * 为什么不 fire-and-forget：`dispatchGesture` 每派发一次新手势，系统会把上一个还没走完的手势
+     * 直接取消（回调 onCancelled）。执行循环原来不等回调，speed 调高、间隔压到十几毫秒之后，
+     * 后一次点击就会把前一次掐死 —— 用户看到的就是「速度越快、漏点越多」。
+     *
+     * @return true = 手势完整执行；false = 没派发出去，或被系统/别的服务取消（调用方可重试）
      */
-    fun performClick(x: Int, y: Int) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            // 使用单个点的 Path 触发点击手势
-            val path = Path().apply {
-                moveTo(x.toFloat(), y.toFloat())
+    suspend fun performClickAwait(x: Int, y: Int): Boolean {
+        val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
+        val stroke = GestureDescription.StrokeDescription(path, 0L, CLICK_DURATION_MS)
+        val gesture = GestureDescription.Builder().addStroke(stroke).build()
+
+        return suspendCancellableCoroutine { cont ->
+            val callback = object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription?) {
+                    if (cont.isActive) cont.resume(true)
+                }
+
+                override fun onCancelled(gestureDescription: GestureDescription?) {
+                    if (cont.isActive) cont.resume(false)
+                }
             }
-            val stroke = GestureDescription.StrokeDescription(path, 0L, 1L)
-            val gesture = GestureDescription.Builder().addStroke(stroke).build()
-            dispatchGesture(gesture, null, null)
-        } else {
-            Log.w("AutoClicker", "performClick requires API 24+, current: ${Build.VERSION.SDK_INT}")
+            val dispatched = try {
+                dispatchGesture(gesture, callback, null)
+            } catch (e: Exception) {
+                false
+            }
+            if (!dispatched) {
+                // 没派发成功就不会有回调，必须自己收尾，否则协程永久挂起
+                if (cont.isActive) cont.resume(false)
+            }
         }
     }
 
     companion object {
+        /** 单次点击的按压时长：1ms 是系统允许的下限，短按不会触发长按 */
+        private const val CLICK_DURATION_MS = 1L
+
         var instance: AutoClickerService? = null
             private set
     }

@@ -45,11 +45,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Image
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.example.autoclicker.ui.components.LiquidGlassIconButton
+import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.layerBackdrop
+import io.github.neoruaa.glasmio.icons.SfIcon
+import io.github.neoruaa.glasmio.icons.SfSymbol
+import io.github.neoruaa.glasmio.ui.GlasmioIconButton
 import com.example.autoclicker.R
 import com.example.autoclicker.ThemeSettings
-import com.example.autoclicker.ui.components.LiquidToggle
+import io.github.neoruaa.glasmio.ui.GlasmioSwitch
+import io.github.neoruaa.glasmio.ui.GlasmioListRow
+import io.github.neoruaa.glasmio.glass.progressiveBlurBackdrop
+import io.github.neoruaa.glasmio.glass.scrollEdgeContentFade
+import com.example.autoclicker.ui.components.RubberBandContainer
+import com.example.autoclicker.ui.components.rememberRubberBandState
 import com.example.autoclicker.ui.components.CheckmarkIcon
 
 @Composable
@@ -66,6 +74,9 @@ fun ThemePreviewScreen(
     val cardBorder = if (isLight) Color.Black.copy(alpha = 0.04f) else Color.White.copy(alpha = 0.06f)
 
     val backdrop = rememberLayerBackdrop()
+    // 内容层：给顶部渐进式模糊采样（玻璃控件仍采样上面那层纯色背景）
+    val contentBackdrop = rememberLayerBackdrop()
+    val rubberState = rememberRubberBandState()
     val density = LocalDensity.current
 
     // 实测 LazyColumn 视口高度和内容高度，动态计算 Spacer
@@ -82,7 +93,8 @@ fun ThemePreviewScreen(
     val titleBarHeightPx = with(density) { 56.dp.toPx() }
     val maskBottomPx = statusBarHeightPx + titleBarHeightPx
     val maskHeightDp = with(density) { maskBottomPx.toDp() }
-    val maskVisualHeightDp = with(density) { (maskBottomPx * 1.3f).toDp() }
+    // 遮罩高度 = 顶栏下沿（原来 ×1.3，模糊尾巴压到了第一条内容上）
+    val maskVisualHeightDp = maskHeightDp
 
     val contentPaddingVertical = (maskHeightDp - 21.dp) + 165.dp
     val viewportContentArea = with(density) { viewportHeightPx.toDp() } - contentPaddingVertical
@@ -96,10 +108,29 @@ fun ThemePreviewScreen(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(bg)
     ) {
+        // 纯色背景层：只录背景，开关/图标按钮在层外采样（层内含采样者会渲染递归崩溃）
+        Box(
+            Modifier
+                .fillMaxSize()
+                .layerBackdrop(backdrop)
+                .background(bg)
+        )
         val isLandscape = maxWidth > maxHeight
         val horizontalPadding = if (isLandscape) ((maxWidth - 360.dp) / 2f).coerceAtLeast(20.dp) else 20.dp
+        RubberBandContainer(
+            state = rubberState,
+            modifier = Modifier
+                .fillMaxSize()
+                // 与宏配置页一致：录制层里既要有内容、也要有背景色
+                .layerBackdrop(contentBackdrop)
+                .background(bg)
+                .scrollEdgeContentFade(
+                    progress = 1f,
+                    headerHeight = maskHeightDp,
+                    headerTop = with(density) { statusBarHeightPx.toDp() }
+                )
+        ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -145,75 +176,42 @@ fun ThemePreviewScreen(
                     )
                 }
 
-                // 说明
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "自动模式将跟随系统深浅色设置切换主题。",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.W400,
-                    color = textSecondary.copy(alpha = 0.5f),
-                    letterSpacing = (-0.12).sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-
                 // 自定义主题色开关
                 Spacer(modifier = Modifier.height(24.dp))
                 SettingsCard(cardBg, cardBorder) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "自定义主题色",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.W400,
-                            color = textPrimary,
-                            letterSpacing = (-0.374).sp
-                        )
-                        LiquidToggle(
-                            selected = { useCustomTheme },
-                            onSelect = { ThemeSettings.updateUseCustomTheme(it) },
-                            backdrop = backdrop
-                        )
-                    }
+                    GlasmioListRow(
+                        title = "自定义主题色",
+                        showTopSeparator = false,
+                        trailing = {
+                            GlasmioSwitch(
+                                checked = useCustomTheme,
+                                onCheckedChange = { ThemeSettings.updateUseCustomTheme(it) },
+                                backdrop = backdrop
+                            )
+                        }
+                    )
                 }
 
                 // 颜色选择卡片
                 Spacer(modifier = Modifier.height(8.dp))
                 Box(modifier = Modifier.alpha(if (useCustomTheme) 1f else 0.4f)) {
                     SettingsCard(cardBg, cardBorder) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             // 标题行
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "颜色",
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.W400,
-                                    color = textPrimary,
-                                    letterSpacing = (-0.374).sp
-                                )
-                                Text(
-                                    text = ThemeSettings.presetColors[selectedColorIndex].name,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.W400,
-                                    color = textSecondary,
-                                    letterSpacing = (-0.2).sp
-                                )
-                            }
+                            GlasmioListRow(
+                                title = "颜色",
+                                detail = ThemeSettings.presetColors[selectedColorIndex].name,
+                                showTopSeparator = false
+                            )
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
 
-                            // 颜色圆点行
+                            // 颜色圆点行（底部留白：卡片是 26dp 圆角裁剪，贴边会被切掉）
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp)
+                                    .padding(bottom = 16.dp),
                                 horizontalArrangement = Arrangement.SpaceEvenly,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -251,21 +249,19 @@ fun ThemePreviewScreen(
                 Spacer(modifier = Modifier.height(spacerHeight))
             }
         }
+        } // RubberBandContainer
 
-        // ===== Gradient overlay =====
-        val maskVisualHeightPx = with(density) { maskVisualHeightDp.toPx() }
+        // ===== 顶部渐进式模糊（替代原来的渐变遮罩）=====
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(maskVisualHeightDp)
                 .zIndex(50f)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(bg, bg, bg.copy(alpha = 0.80f), bg.copy(alpha = 0f)),
-                        startY = 0f,
-                        endY = maskVisualHeightPx
-                    )
+                .progressiveBlurBackdrop(
+                    backdrop = contentBackdrop,
+                    progress = 1f,
+                    maxRadius = 10.dp
                 )
         )
 
@@ -279,16 +275,16 @@ fun ThemePreviewScreen(
                 .zIndex(60f),
             contentAlignment = Alignment.Center
         ) {
-                        LiquidGlassIconButton(
+                        GlasmioIconButton(
                 onClick = onBack,
                 backdrop = backdrop,
                 modifier = Modifier.align(Alignment.CenterStart)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_chevron_left),
+                // 与库 demo 的返回按钮一致：SfSymbol.ChevronBack + 玻璃按钮自带的前景色
+                SfIcon(
+                    symbol = SfSymbol.ChevronBack,
                     contentDescription = "返回",
-                    modifier = Modifier.size(24.dp),
-                                        colorFilter = ColorFilter.tint(if (isLight) Color.Black else Color.White)
+                    mirrored = true
                 )
             }
 

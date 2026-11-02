@@ -857,12 +857,25 @@ class FloatingWindowService : Service() {
                 while (isActive && isExecuting && currentRepeat < config.repeatCount) {
                     if (currentPosition < config.positions.size) {
                         val pos = config.positions[currentPosition]
-                        service.performClick(pos.first, pos.second)
+                        val startedAt = android.os.SystemClock.elapsedRealtime()
+
+                        // 必须等手势真的走完再发下一个：fire-and-forget 时后一次 dispatch 会把
+                        // 前一次还没跑完的手势取消掉，speed 越高手感越像「漏点」。
+                        val clicked = service.performClickAwait(pos.first, pos.second)
+                        if (!clicked && isActive) {
+                            // 被系统 / 别的无障碍服务打断：隔一帧补一次，别静默吞掉这个点
+                            delay(RetryGestureDelayMs)
+                            service.performClickAwait(pos.first, pos.second)
+                        }
                         currentPosition++
 
                         if (currentPosition < config.positions.size) {
-                            val nextDelay = config.positions[currentPosition].third - pos.third
-                            if (nextDelay > 0) delay((nextDelay / config.speed).toLong())
+                            val gapMs = (config.positions[currentPosition].third - pos.third)
+                                .coerceAtLeast(0L)
+                            val targetMs = (gapMs / config.speed.coerceAtLeast(0.01f)).toLong()
+                            // 扣掉手势本身耗时：原来是「点完再等 gap」，节奏会一笔一笔往后拖
+                            val remain = targetMs - (android.os.SystemClock.elapsedRealtime() - startedAt)
+                            if (remain > 0) delay(remain)
                         }
                     } else {
                         currentRepeat++
@@ -930,6 +943,9 @@ class FloatingWindowService : Service() {
 
     companion object {
         private const val CHANNEL_ID = "auto_clicker_channel"
+
+        /** 手势被取消后重试前的等待，约一帧 */
+        private const val RetryGestureDelayMs = 16L
 
         var instance: FloatingWindowService? = null
             private set

@@ -56,11 +56,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.autoclicker.ThemeSettings
-import com.example.autoclicker.ui.components.LiquidGlassIconButton
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import io.github.neoruaa.glasmio.icons.SfIcon
+import io.github.neoruaa.glasmio.icons.SfSymbol
+import io.github.neoruaa.glasmio.ui.GlasmioIconButton
+import io.github.neoruaa.glasmio.ui.GlasmioGroupedList
+import io.github.neoruaa.glasmio.ui.GlasmioListRow
+import io.github.neoruaa.glasmio.glass.progressiveBlurBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.layerBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
 import com.kyant.shapes.RoundedCornerStyle
 import com.kyant.shapes.RoundedRectangle
-import io.github.fannn_yb.rubberband.RubberBandContainer
+import com.example.autoclicker.ui.components.RubberBandContainer
+import com.example.autoclicker.ui.components.rememberRubberBandState
+import io.github.neoruaa.glasmio.glass.scrollEdgeContentFade
 
 /**
  * 致谢条目，包含名称和描述，点击可打开对应链接。
@@ -77,7 +85,8 @@ private val creditItems = listOf(
     CreditItem("Jetpack Compose", "声明式 UI 框架", "https://developer.android.com/compose"),
     CreditItem("Material3", "Material Design 3 组件", "https://m3.material.io"),
     CreditItem("MMKV (Tencent)", "高性能键值存储", "https://github.com/Tencent/MMKV"),
-    CreditItem("Backdrop", "液态玻璃背景效果", "https://github.com/kyant0/"),
+    CreditItem("Glasmio", "iOS 27 液态玻璃组件库", "https://github.com/NEORUAA/Glasmio"),
+    CreditItem("AndroidLiquidGlass", "液态玻璃折射与光学实现", "https://github.com/Kyant0/AndroidLiquidGlass"),
     CreditItem("Shapes (Kyant)", "连续圆角形状", "https://github.com/kyant0/shapes"),
     CreditItem("Kotlin Coroutines", "异步编程框架", "https://github.com/Kotlin/kotlinx.coroutines"),
     CreditItem("Kotlin Immutable", "不可变集合", "https://github.com/Kotlin/kotlinx.collections.immutable"),
@@ -103,6 +112,9 @@ fun CreditsScreen(
 
     val context = LocalContext.current
     val backdrop = rememberLayerBackdrop()
+    // 内容层：给顶部渐进式模糊采样
+    val contentBackdrop = rememberLayerBackdrop()
+    val rubberState = rememberRubberBandState()
     val density = LocalDensity.current
     val listState = rememberLazyListState()
 
@@ -116,7 +128,9 @@ fun CreditsScreen(
     val rawTitleHidden by remember {
         derivedStateOf {
             if (listState.firstVisibleItemIndex > 0) 1f
-            else if (titleBottomY <= 0f) 0f
+            else if (titleBottomY <= 0f) {
+                if (titleTopY < 0f) 1f else 0f
+            }
             else {
                 val titleHeight = (titleBottomY - titleTopY).coerceAtLeast(1f)
                 val hidden = (maskBottomPx - titleTopY) / titleHeight
@@ -131,19 +145,39 @@ fun CreditsScreen(
     )
 
     val maskHeightDp = with(density) { maskBottomPx.toDp() }
-    val maskVisualHeightDp = with(density) { (maskBottomPx * 1.3f).toDp() }
+    // 遮罩高度 = 顶栏下沿（原来 ×1.3，模糊尾巴压到了第一条内容上）
+    val maskVisualHeightDp = maskHeightDp
 
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(bg)
     ) {
+        // 纯色背景层：只录背景，返回按钮在层外采样（层内含采样者会渲染递归崩溃）
+        Box(
+            Modifier
+                .fillMaxSize()
+                .layerBackdrop(backdrop)
+                .background(bg)
+        )
         val isLandscape = maxWidth > maxHeight
         val horizontalPadding = if (isLandscape) ((maxWidth - 360.dp) / 2f).coerceAtLeast(20.dp) else 20.dp
-        RubberBandContainer {
+        RubberBandContainer(
+            state = rubberState,
+            modifier = Modifier
+                .fillMaxSize()
+                // 与宏配置页一致：录制层里既要有内容、也要有背景色
+                .layerBackdrop(contentBackdrop)
+                .background(bg)
+                .scrollEdgeContentFade(
+                    progress = 1f,
+                    headerHeight = maskHeightDp,
+                    headerTop = with(density) { statusBarHeightPx.toDp() }
+                )
+        ) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize(),
             contentPadding = PaddingValues(
                 start = horizontalPadding,
                 end = horizontalPadding,
@@ -184,21 +218,15 @@ fun CreditsScreen(
             }
 
             item(key = "section_credits") {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedRectangle(22.dp, RoundedCornerStyle.Continuous))
-                        .background(cardBg)
-                        .border(0.5.dp, cardBorder, RoundedRectangle(22.dp, RoundedCornerStyle.Continuous))
-                ) {
+                GlasmioGroupedList {
                     val showDiv = ThemeSettings.showDividers
                     creditItems.forEachIndexed { index, item ->
-                        CreditRow(
-                            name = item.name,
-                            description = item.description,
-                            isLight = isLight,
-                            showDivider = showDiv && index != creditItems.lastIndex,
-                            dividerColor = dividerColor,
+                        GlasmioListRow(
+                            title = item.name,
+                            showTopSeparator = showDiv && index != 0,
+                            // 箭头换回 App 原来的图标和大小
+                            showDisclosure = false,
+                            trailing = { OriginalChevron(isLight) },
                             onClick = {
                                 try {
                                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(item.url))
@@ -218,20 +246,17 @@ fun CreditsScreen(
         }
         } // RubberBandContainer
 
-        // 渐变遮罩
-        val maskVisualHeightPx = with(density) { maskVisualHeightDp.toPx() }
+        // 顶部渐进式模糊（替代原来的渐变遮罩）
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(maskVisualHeightDp)
                 .zIndex(1f)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(bg, bg.copy(alpha = 0.85f), bg.copy(alpha = 0f)),
-                        startY = 0f,
-                        endY = maskVisualHeightPx
-                    )
+                .progressiveBlurBackdrop(
+                    backdrop = contentBackdrop,
+                    progress = 1f,
+                    maxRadius = 10.dp
                 )
         )
 
@@ -245,16 +270,16 @@ fun CreditsScreen(
                 .zIndex(2f),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            LiquidGlassIconButton(
+            GlasmioIconButton(
                 onClick = onBack,
                 backdrop = backdrop,
                 modifier = Modifier.size(44.dp)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_chevron_left),
+                // 与库 demo 的返回按钮一致：SfSymbol.ChevronBack + 玻璃按钮自带的前景色
+                SfIcon(
+                    symbol = SfSymbol.ChevronBack,
                     contentDescription = "返回",
-                    modifier = Modifier.size(24.dp),
-                    colorFilter = ColorFilter.tint(if (isLight) Color.Black else Color.White)
+                    mirrored = true
                 )
             }
 

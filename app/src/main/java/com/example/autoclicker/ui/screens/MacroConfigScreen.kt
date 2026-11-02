@@ -75,22 +75,45 @@ import com.example.autoclicker.MacroConfig
 import com.example.autoclicker.R
 import com.example.autoclicker.ThemeSettings
 import com.example.autoclicker.ui.components.GlasenseSwipeable
-import io.github.fannn_yb.rubberband.RubberBandContainer
+import com.example.autoclicker.ui.components.RubberBandContainer
+import com.example.autoclicker.ui.components.rememberRubberBandState
+import io.github.neoruaa.glasmio.ui.GlasmioAlertButtonLayout
+import io.github.neoruaa.glasmio.ui.GlasmioAlertButtonRole
+import io.github.neoruaa.glasmio.ui.GlasmioAlertButtonSpec
+import io.github.neoruaa.glasmio.ui.GlasmioAlertDialog
+import io.github.neoruaa.glasmio.glass.progressiveBlurBackdrop
+import io.github.neoruaa.glasmio.glass.trackBackdropPosition
+import io.github.neoruaa.glasmio.glass.scrollEdgeContentFade
 import com.example.autoclicker.ui.components.SwipeableActionButton
 import com.example.autoclicker.ui.components.rememberSwipeableListState
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.colorControls
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.highlight.Highlight
+import io.github.neoruaa.glasmio.glass.render.backdrops.layerBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
+import io.github.neoruaa.glasmio.glass.render.drawBackdrop
+import io.github.neoruaa.glasmio.glass.render.effects.blur
+import io.github.neoruaa.glasmio.glass.render.effects.colorFilter
+import io.github.neoruaa.glasmio.glass.render.effects.lens
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import io.github.neoruaa.glasmio.glass.render.highlight.Highlight
 import com.kyant.shapes.Capsule
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+
+/** 用 ColorMatrix 近似原 Kyant 的 colorControls(brightness, saturation)。 */
+private fun brightnessSaturationFilter(brightness: Float, saturation: Float): ColorFilter {
+    val matrix = ColorMatrix()
+    matrix.setToSaturation(saturation)
+    if (brightness != 0f) {
+        val scale = 1f + brightness
+        matrix[0, 0] *= scale
+        matrix[1, 1] *= scale
+        matrix[2, 2] *= scale
+    }
+    return ColorFilter.colorMatrix(matrix)
+}
 
 @Composable
 fun MacroConfigScreen(
@@ -109,6 +132,9 @@ fun MacroConfigScreen(
 
     val context = LocalContext.current
     val density = LocalDensity.current
+
+    // 橡皮筋状态提升到页面级，供容器外的顶栏模糊读取
+    val rubberState = rememberRubberBandState()
     val haptic = LocalHapticFeedback.current
                 var macros by remember { mutableStateOf(loadMacros(context)) }
     // 从详情页返回后重新加载数据
@@ -152,7 +178,9 @@ fun MacroConfigScreen(
     val rawTitleHidden by remember {
         derivedStateOf {
             if (listState.firstVisibleItemIndex > 0) 1f
-            else if (titleBottomY <= 0f) 0f
+            else if (titleBottomY <= 0f) {
+                if (titleTopY < 0f) 1f else 0f
+            }
             else {
                 val titleHeight = (titleBottomY - titleTopY).coerceAtLeast(1f)
                 val hidden = (maskBottomPx - titleTopY) / titleHeight
@@ -168,7 +196,8 @@ fun MacroConfigScreen(
 
     // 遮罩高度 dp
     val maskHeightDp = with(density) { maskBottomPx.toDp() }
-    val maskVisualHeightDp = with(density) { (maskBottomPx * 1.3f).toDp() }
+    // 遮罩高度 = 顶栏下沿（原来 ×1.3，模糊尾巴压到了第一条内容上）
+    val maskVisualHeightDp = maskHeightDp
 
     BoxWithConstraints(
         modifier = modifier
@@ -177,9 +206,28 @@ fun MacroConfigScreen(
     ) {
         val isLandscape = maxWidth > maxHeight
         val horizontalPadding = if (isLandscape) ((maxWidth - 360.dp) / 2f).coerceAtLeast(24.dp) else 24.dp
-        // 页面内容（供 backdrop 录制）
-        Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
-        RubberBandContainer {
+        // 页面内容（供 backdrop 录制）：背景画在录制层内部，玻璃才采得到底色
+        // trackBackdropPosition：对话框在独立 window 里，必须登记这层的窗口位置，
+        // 否则跨窗口采样直接放弃 → 弹窗玻璃只剩底色（颜色不对）
+        Box(
+            Modifier
+                .fillMaxSize()
+                .layerBackdrop(backdrop)
+                .trackBackdropPosition(backdrop)
+                .background(bg)
+        ) {
+        // 🔴 录制层在外面、橡皮筋在里层：拉伸位移会被录进 backdrop，模糊才跟手
+        RubberBandContainer(
+            state = rubberState,
+            modifier = Modifier
+                .fillMaxSize()
+                // demo 同款：内容在顶栏下沿渐隐
+                .scrollEdgeContentFade(
+                    progress = 1f,
+                    headerHeight = maskHeightDp,
+                    headerTop = with(density) { statusBarHeightPx.toDp() }
+                )
+        ) {
         // ===== LazyColumn =====
         LazyColumn(
             state = listState,
@@ -345,24 +393,17 @@ fun MacroConfigScreen(
         } // RubberBandContainer
         } // 关闭内层 layerBackdrop Box（只录 LazyColumn；遮罩/标题栏放到外层，与 overscroll 各持独立 layer）
 
-        // ===== Gradient overlay at top =====（backdrop 的兄弟节点）
-        val maskVisualHeightPx = with(density) { maskVisualHeightDp.toPx() }
+        // ===== 顶栏渐进边缘模糊（demo 同款：库原生 progressiveBlurBackdrop，不染色）=====
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(maskVisualHeightDp)
                 .zIndex(50f)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            bg,
-                            bg.copy(alpha = 0.85f),
-                            bg.copy(alpha = 0f)
-                        ),
-                        startY = 0f,
-                        endY = maskVisualHeightPx
-                    )
+                .progressiveBlurBackdrop(
+                    backdrop = backdrop,
+                    progress = 1f,
+                    maxRadius = 10.dp
                 )
         )
 
@@ -405,172 +446,57 @@ fun MacroConfigScreen(
             }
         }
 
-        // 删除确认弹窗 — 液态玻璃样式，不透明底衬防止透出页面文字
-        val dialogAlphaAnim = remember { Animatable(0f) }
-        val dialogScaleAnim = remember { Animatable(0.3f) }
-        val dimAlpha = remember { Animatable(0f) }
-        var dialogVisible by remember { mutableStateOf(false) }
-
+        // 删除确认弹窗 —— 换成库的 GlasmioAlertDialog（demo 同款材质 / 尺寸 / 动画）
         // 导航栏遮罩点击 → 关闭弹窗
         LaunchedEffect(navDimDismissTrigger) {
             if (navDimDismissTrigger > 0) macroToDelete = null
         }
 
-        // 同步 dimAlpha 动画值到 MainActivity 用于导航栏遮罩
-        LaunchedEffect(dialogVisible) {
-            if (dialogVisible) {
-                snapshotFlow { dimAlpha.value }.collect { onDimAlphaChange(it) }
-            } else {
-                onDimAlphaChange(0f)
-            }
-        }
+        // 库的对话框自带全屏 scrim，导航栏不需要再单独压暗
+        LaunchedEffect(Unit) { onDimAlphaChange(0f) }
 
-        val dimColor = if (isLight) Color(0xFF29293A).copy(0.23f) else Color(0xFF121212).copy(0.56f)
-        val containerColor = if (isLight) Color(0xFFFAFAFA).copy(0.6f) else Color(0xFF121212).copy(0.4f)
-
+        // 退场动画期间保留标题/文案，避免文字先消失
         LaunchedEffect(macroToDelete) {
             if (macroToDelete != null) {
                 dialogTarget = macroToDelete
-                dialogVisible = true
-                dialogScaleAnim.snapTo(0.3f)
-                dialogAlphaAnim.snapTo(0f)
-                dimAlpha.snapTo(0f)
-                coroutineScope {
-                    launch { dimAlpha.animateTo(1f, spring(dampingRatio = 0.8f, stiffness = 400f)) }
-                    launch { dialogAlphaAnim.animateTo(1f, spring(dampingRatio = 0.8f, stiffness = 400f)) }
-                    dialogScaleAnim.animateTo(1f, spring(dampingRatio = 1f, stiffness = 550f))
-                }
-            } else if (dialogTarget != null) {
-                coroutineScope {
-                    launch { dimAlpha.animateTo(0f, tween(200)) }
-                    launch { dialogAlphaAnim.animateTo(0f, tween(200)) }
-                    dialogScaleAnim.animateTo(0.3f, spring(dampingRatio = 0.7f, stiffness = 390f))
-                }
-                dialogVisible = false
+            } else {
+                kotlinx.coroutines.delay(320)
                 dialogTarget = null
             }
         }
 
-        if (dialogVisible) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .zIndex(100f)
-                    .graphicsLayer { alpha = dimAlpha.value }
-                    .background(dimColor)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { macroToDelete = null },
-                contentAlignment = Alignment.Center
-            ) {
-                    // 动画容器：内含不透明底衬 + 液态玻璃卡片
-                    // 横屏时与页面卡片同宽（360dp），父容器 Center 自动水平居中
-                    Box(
-                        modifier = Modifier
-                            .then(
-                                if (isLandscape) {
-                                    Modifier.width(360.dp)
-                                } else {
-                                    Modifier.padding(horizontal = 40.dp).fillMaxWidth()
-                                }
-                            )
-                            .graphicsLayer {
-                                alpha = dialogAlphaAnim.value
-                                scaleX = dialogScaleAnim.value
-                                scaleY = dialogScaleAnim.value
-                            }
-                    ) {
-                        // 不透明底衬（挡住页面原文，只让 backdrop 录制的模糊内容显示）
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clip(RoundedRectangle(48.dp, RoundedCornerStyle.Continuous))
-                                .background(bg)
-                        )
-
-                        // 液态玻璃卡片
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .drawBackdrop(
-                                    backdrop = backdrop,
-                                    shape = { RoundedRectangle(48f.dp) },
-                                    effects = {
-                                        colorControls(
-                                            brightness = if (isLight) 0.2f else 0f,
-                                            saturation = 1.5f
-                                        )
-                                        blur(if (isLight) 16f.dp.toPx() else 8f.dp.toPx())
-                                        lens(24f.dp.toPx(), 48f.dp.toPx(), depthEffect = true)
-                                    },
-                                    highlight = { Highlight.Plain },
-                                    onDrawSurface = { drawRect(containerColor) }
-                                )
-                        ) {
-                            Text(
-                                "确认删除",
-                                Modifier.padding(28.dp, 24.dp, 28.dp, 12.dp),
-                                style = TextStyle(textPrimary, 24.sp, FontWeight.Medium)
-                            )
-                            val displayName = dialogTarget!!.name.ifEmpty { "未命名" }
-                            Text(
-                                "确定要删除「${if (displayName.length > 20) displayName.take(20) + "..." else displayName}」吗？\n此操作不可撤销。",
-                                Modifier.padding(24.dp, 12.dp, 24.dp, 12.dp)
-                                    .then(
-                                        if (isLight) Modifier
-                                        else Modifier.graphicsLayer(blendMode = BlendMode.Plus)
-                                    ),
-                                style = TextStyle(textSecondary, 15.sp),
-                                maxLines = 5
-                            )
-                            Row(
-                                Modifier
-                                    .padding(24.dp, 12.dp, 24.dp, 24.dp)
-                                    .fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    Modifier
-                                        .clip(Capsule())
-                                        .background(containerColor.copy(alpha = 0.2f))
-                                        .border(0.5.dp, textPrimary.copy(alpha = 0.15f), Capsule())
-                                        .clickable { macroToDelete = null }
-                                        .height(48.dp)
-                                        .weight(1f)
-                                        .padding(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("取消", style = TextStyle(textPrimary, 16.sp))
-                                }
-                                Row(
-                                    Modifier
-                                        .clip(Capsule())
-                                        .background(deleteColor)
-                                        .clickable {
-                                            if (ThemeSettings.vibrateEnabled) {
-                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            }
-                                            val target = dialogTarget!!
-                                            macroToDelete = null
-                                            macroAnimatingOut = target.name
-                                        }
-                                        .height(48.dp)
-                                        .weight(1f)
-                                        .padding(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("删除", style = TextStyle(Color.White, 16.sp))
-                                }
-                            }
+        val deleteTarget = macroToDelete ?: dialogTarget
+        GlasmioAlertDialog(
+            visible = macroToDelete != null,
+            onDismissRequest = { macroToDelete = null },
+            title = "确认删除",
+            message = deleteTarget?.let { target ->
+                val displayName = target.name.ifEmpty { "未命名" }
+                "确定要删除「${if (displayName.length > 20) displayName.take(20) + "..." else displayName}」吗？\n此操作不可撤销。"
+            } ?: "",
+            backdrop = backdrop,
+            buttonLayout = GlasmioAlertButtonLayout.SideBySide,
+            buttons = listOf(
+                GlasmioAlertButtonSpec(
+                    label = "取消",
+                    onClick = { macroToDelete = null },
+                    role = GlasmioAlertButtonRole.Cancel
+                ),
+                GlasmioAlertButtonSpec(
+                    label = "删除",
+                    onClick = {
+                        if (ThemeSettings.vibrateEnabled) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         }
-                    }
-                }
-            }
-        }
+                        val target = deleteTarget
+                        macroToDelete = null
+                        if (target != null) macroAnimatingOut = target.name
+                    },
+                    role = GlasmioAlertButtonRole.Destructive
+                )
+            ),
+        )
+    }
     }
 
 private fun loadMacros(context: Context): List<MacroConfig> {

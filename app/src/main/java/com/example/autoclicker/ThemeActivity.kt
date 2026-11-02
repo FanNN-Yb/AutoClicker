@@ -8,6 +8,7 @@ import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.view.WindowCompat
+import com.example.autoclicker.ui.AppGlasmioTheme
 import com.example.autoclicker.ui.screens.ThemePreviewScreen
 import io.github.fannn_yb.rubberband.overscroll.rememberOffsetOverscrollFactory
 
@@ -19,6 +20,7 @@ class ThemeActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
+            AppGlasmioTheme {
             val overscrollFactory = rememberOffsetOverscrollFactory(
                 orientation = Orientation.Vertical
             )
@@ -28,6 +30,7 @@ class ThemeActivity : ComponentActivity() {
                 ThemePreviewScreen(
                     onBack = { finish() }
                 )
+            }
             }
         }
     }

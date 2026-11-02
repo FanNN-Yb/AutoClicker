@@ -65,13 +65,20 @@ import com.example.autoclicker.R
 import com.example.autoclicker.ThemeSettings
 import com.example.autoclicker.FloatingWindowService
 import com.example.autoclicker.ui.components.CheckmarkIcon
-import com.example.autoclicker.ui.components.GlassSlider
-import com.example.autoclicker.ui.components.LiquidToggle
-import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.backdrops.emptyBackdrop
+import io.github.neoruaa.glasmio.ui.GlasmioSlider
+import io.github.neoruaa.glasmio.ui.GlasmioSwitch
+import io.github.neoruaa.glasmio.ui.GlasmioGroupedList
+import io.github.neoruaa.glasmio.ui.GlasmioListRow
+import io.github.neoruaa.glasmio.ui.GlasmioSectionTitle
+import io.github.neoruaa.glasmio.glass.render.Backdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.layerBackdrop
+import io.github.neoruaa.glasmio.glass.render.backdrops.rememberLayerBackdrop
 import com.kyant.shapes.RoundedCornerStyle
 import com.kyant.shapes.RoundedRectangle
-import io.github.fannn_yb.rubberband.RubberBandContainer
+import com.example.autoclicker.ui.components.RubberBandContainer
+import com.example.autoclicker.ui.components.rememberRubberBandState
+import io.github.neoruaa.glasmio.glass.progressiveBlurBackdrop
+import io.github.neoruaa.glasmio.glass.scrollEdgeContentFade
 
 @Composable
 fun SettingsScreen(
@@ -83,7 +90,12 @@ fun SettingsScreen(
     permissionHighlightTrigger: Int = 0,
     modifier: Modifier = Modifier
 ) {
-    val effectiveBackdrop = backdrop ?: emptyBackdrop()
+    // 设置页自己开一层录制：外部没传 backdrop（MainActivity 目前不传）时用它，
+    // 这样开关/滑块的玻璃镜头能采到页面背景，而不是空层（空层 = 黑块 + 锯齿）
+    val pageBackdrop = rememberLayerBackdrop()
+    // 内容层：给顶部渐进式模糊采样（与上面给玻璃用的纯色层分开，否则会渲染递归）
+    val contentBackdrop = rememberLayerBackdrop()
+    val effectiveBackdrop: Backdrop = backdrop ?: pageBackdrop
     val isLight = !ThemeSettings.isDarkTheme()
    val bg = if (isLight) Color(0xFFF2F2F7) else Color(0xFF000000)
     val textPrimary = if (isLight) Color(0xFF1D1D1F) else Color.White
@@ -102,6 +114,9 @@ fun SettingsScreen(
     val themeAuto = ThemeSettings.themeAuto
 
     val density = LocalDensity.current
+
+    // 橡皮筋状态提升到页面级，供容器外的顶栏玻璃/模糊读取
+    val rubberState = rememberRubberBandState()
     val listState = rememberLazyListState()
 
     // ===== 权限区块高亮闪烁（从首页提示文字跳转过来时触发）=====
@@ -131,7 +146,9 @@ fun SettingsScreen(
     val rawTitleHidden by remember {
         derivedStateOf {
             if (listState.firstVisibleItemIndex > 0) 1f
-            else if (titleBottomY <= 0f) 0f
+            else if (titleBottomY <= 0f) {
+                if (titleTopY < 0f) 1f else 0f
+            }
             else {
                 val titleHeight = (titleBottomY - titleTopY).coerceAtLeast(1f)
                 val hidden = (maskBottomPx - titleTopY) / titleHeight
@@ -146,18 +163,43 @@ fun SettingsScreen(
     )
 
     val maskHeightDp = with(density) { maskBottomPx.toDp() }
-    val maskVisualHeightDp = with(density) { (maskBottomPx * 1.3f).toDp() }
+    // 遮罩高度 = 顶栏下沿（原来 ×1.3，模糊尾巴压到了第一条内容上）
+    val maskVisualHeightDp = maskHeightDp
 
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            .background(bg)
     ) {
+        // 纯色背景层：只录背景色，开关/滑块在层外采样。
+        // 若把 layerBackdrop 挂在根节点，开关会在层内部采样自己所在的层 → 渲染树递归 → SIGSEGV
+        Box(
+            Modifier
+                .fillMaxSize()
+                .layerBackdrop(pageBackdrop)
+                .background(bg)
+        )
         val isLandscape = maxWidth > maxHeight
         val horizontalPadding = if (isLandscape) ((maxWidth - 360.dp) / 2f).coerceAtLeast(20.dp) else 20.dp
-        RubberBandContainer {
+        // 🔴 录制层必须包在橡皮筋容器【外面】：拉伸是容器的放置位移，
+        //    录在容器内部的话位移不在录制内容里 → 拉伸出来的内容模糊不到。
+        //    容器的 offset 是布局级偏移，每帧触发位置回调，遮罩逐帧重采样。
+        RubberBandContainer(
+            state = rubberState,
+            modifier = Modifier
+                .fillMaxSize()
+                // 与宏配置页一致：录制层里既要有内容、也要有背景色
+                .layerBackdrop(contentBackdrop)
+                .background(bg)
+                // demo 同款：内容在顶栏下沿渐隐（与顶栏模糊一起构成边缘效果）
+                .scrollEdgeContentFade(
+                    progress = 1f,
+                    headerHeight = maskHeightDp,
+                    headerTop = with(density) { statusBarHeightPx.toDp() }
+                )
+        ) {
         LazyColumn(
-            state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(
+            state = listState, modifier = Modifier
+                .fillMaxSize(), contentPadding = PaddingValues(
                 start = horizontalPadding, end = horizontalPadding, top = maskHeightDp + 12.dp, bottom = 120.dp
             ), verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
@@ -257,9 +299,9 @@ fun SettingsScreen(
                         showDivider = showDividers,
                         dividerColor = dividerColor
                     ) {
-                        LiquidToggle(
-                            selected = { vibrateEnabled },
-                            onSelect = { ThemeSettings.updateVibrateEnabled(it) },
+                        GlasmioSwitch(
+                            checked = vibrateEnabled,
+                            onCheckedChange = { ThemeSettings.updateVibrateEnabled(it) },
                             backdrop = effectiveBackdrop
                         )
                     }
@@ -268,22 +310,13 @@ fun SettingsScreen(
                         description = "在项目之间显示分割线",
                         isLight = isLight,
                         showDivider = false,
-                        dividerColor = dividerColor
+                        dividerColor = dividerColor,
+                        drawBottomDivider = showDividers
                     ) {
-                        LiquidToggle(
-                            selected = { showDividers },
-                            onSelect = { ThemeSettings.updateShowDividers(it) },
+                        GlasmioSwitch(
+                            checked = showDividers,
+                            onCheckedChange = { ThemeSettings.updateShowDividers(it) },
                             backdrop = effectiveBackdrop
-                        )
-                    }
-                    // 悬浮窗不透明度
-                    if (showDividers) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .height(0.5.dp)
-                                .background(dividerColor)
                         )
                     }
                     FloatingOpacityRow(
@@ -331,20 +364,18 @@ fun SettingsScreen(
         }
         } // RubberBandContainer
 
-        // ===== Gradient overlay =====
-        val maskVisualHeightPx = with(density) { maskVisualHeightDp.toPx() }
+        // 顶栏渐进边缘模糊（demo 同款：库原生 progressiveBlurBackdrop，不染色；
+        // 内容渐隐由列表自身的 scrollEdgeContentFade 负责）
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(maskVisualHeightDp)
                 .zIndex(1f)
-               .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(bg, bg.copy(alpha = 0.85f), bg.copy(alpha = 0f)),
-                        startY = 0f,
-                        endY = maskVisualHeightPx
-                    )
+                .progressiveBlurBackdrop(
+                    backdrop = contentBackdrop,
+                    progress = 1f,
+                    maxRadius = 10.dp
                 )
         )
 
@@ -393,15 +424,8 @@ fun SettingsScreen(
 internal fun SettingsCard(
     cardBg: Color, borderColor: Color, content: @Composable () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedRectangle(22.dp, RoundedCornerStyle.Continuous))
-            .background(cardBg)
-            .border(0.5.dp, borderColor, RoundedRectangle(22.dp, RoundedCornerStyle.Continuous))
-    ) {
-        content()
-    }
+    // demo 同款分组卡片：连续圆角 + 自带的卡片材质
+    GlasmioGroupedList(modifier = Modifier.fillMaxWidth()) { content() }
 }
 
 // ==================== Section Header ====================
@@ -410,15 +434,8 @@ internal fun SettingsCard(
 internal fun SettingsSectionHeader(
     title: String, isLight: Boolean, modifier: Modifier = Modifier
 ) {
-    val textSecondary = if (isLight) Color(0x99000000) else Color(0x99FFFFFF)
-    Text(
-        text = title,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.W400,
-        color = textSecondary,
-        letterSpacing = (-0.08).sp,
-        modifier = modifier.padding(start = 16.dp, bottom = 0.dp)
-    )
+    // demo 同款分组标题（39dp 高、底部对齐、次要色）
+    GlasmioSectionTitle(title = title, modifier = modifier)
 }
 
 // ==================== Row: text + switch ====================
@@ -430,39 +447,16 @@ private fun SettingsRow(
     isLight: Boolean,
     showDivider: Boolean,
     dividerColor: Color,
+    drawBottomDivider: Boolean = false,
     trailing: @Composable () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (showDivider) Modifier.drawBehind {
-                drawLine(
-                    color = dividerColor,
-                    start = Offset(16.dp.toPx(), size.height),
-                    end = Offset(size.width - 16.dp.toPx(), size.height),
-                    strokeWidth = 0.5.dp.toPx()
-                )
-            } else Modifier)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.W400,
-                color = if (isLight) Color(0xFF1D1D1F) else Color.White,
-                letterSpacing = (-0.374).sp
-            )
-            Text(
-                text = description,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.W400,
-                color = if (isLight) Color(0xFF6E6E73) else Color(0xFF8E8E93),
-                letterSpacing = (-0.224).sp
-            )
-        }
-        trailing()
-    }
+    // demo 行样式：单行标题 + 尾部控件，说明文字已去掉
+    GlasmioListRow(
+        title = title,
+        showTopSeparator = false,
+        modifier = Modifier.demoSeparator(showDivider || drawBottomDivider, dividerColor),
+        trailing = trailing
+    )
 }
 
 // ==================== Row: clickable action ====================
@@ -477,50 +471,20 @@ private fun SettingsActionRow(
     onClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (showDivider) Modifier.drawBehind {
-                drawLine(
-                    color = dividerColor,
-                    start = Offset(16.dp.toPx(), size.height),
-                    end = Offset(size.width - 16.dp.toPx(), size.height),
-                    strokeWidth = 0.5.dp.toPx()
-                )
-            } else Modifier)
-            .clickable {
-                if (ThemeSettings.vibrateEnabled) {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                }
-                onClick()
+    GlasmioListRow(
+        title = title,
+        showTopSeparator = false,
+        modifier = Modifier.demoSeparator(showDivider, dividerColor),
+        // 箭头换回 App 原来的图标和大小，不用库的 SF 箭头
+        showDisclosure = false,
+        trailing = { OriginalChevron(isLight) },
+        onClick = {
+            if (ThemeSettings.vibrateEnabled) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.W400,
-                color = if (isLight) Color(0xFF1D1D1F) else Color.White,
-                letterSpacing = (-0.374).sp
-            )
-            if (description.isNotEmpty()) {
-                Text(
-                    text = description,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.W400,
-                    color = if (isLight) Color(0xFF6E6E73) else Color(0xFF8E8E93),
-                    letterSpacing = (-0.224).sp
-                )
-            }
+            onClick()
         }
-        Icon(
-            painter = painterResource(R.drawable.ic_chevron_right),
-            contentDescription = null,
-            tint = if (isLight) Color(0xFF1D1D1F) else Color.Unspecified,
-            modifier = Modifier.size(width = 8.dp, height = 12.dp)
-        )
-    }
+    )
 }
 
 // ==================== Row: title + value ====================
@@ -529,35 +493,37 @@ private fun SettingsActionRow(
 internal fun SettingsInfoRow(
     title: String, value: String, isLight: Boolean, showDivider: Boolean, dividerColor: Color
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (showDivider) Modifier.drawBehind {
-                drawLine(
-                    color = dividerColor,
-                    start = Offset(16.dp.toPx(), size.height),
-                    end = Offset(size.width, size.height),
-                    strokeWidth = 0.5.dp.toPx()
-                )
-            } else Modifier)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(
-            text = title,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.W400,
-            color = if (isLight) Color(0xFF1D1D1F) else Color.White,
-            letterSpacing = (-0.374).sp
-        )
-        Text(
-            text = value,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.W400,
-            color = Color.Gray,
-            letterSpacing = (-0.374).sp
+    GlasmioListRow(
+        title = title,
+        detail = value,
+        showTopSeparator = false,
+        modifier = Modifier.demoSeparator(showDivider, dividerColor)
+    )
+}
+
+/** demo 的分割线样式：从文字起始处（左 16dp）开始，一直画到卡片右边缘。 */
+internal fun Modifier.demoSeparator(visible: Boolean, color: Color): Modifier =
+    if (!visible) this else drawBehind {
+        drawLine(
+            color = color,
+            start = Offset(16.dp.toPx(), size.height),
+            end = Offset(size.width, size.height),
+            strokeWidth = 0.5.dp.toPx()
         )
     }
+
+/**
+ * 卡片行右侧的小箭头 —— 用 App 原来的 ic_chevron_right（8×12dp），
+ * 不用库里 GlasmioListRow 自带的 SF 箭头（它偏大也偏细）。
+ */
+@Composable
+internal fun OriginalChevron(isLight: Boolean) {
+    Icon(
+        painter = painterResource(R.drawable.ic_chevron_right),
+        contentDescription = null,
+        tint = if (isLight) Color(0xFF1D1D1F) else Color.Unspecified,
+        modifier = Modifier.size(width = 8.dp, height = 12.dp)
+    )
 }
 
 // ==================== Theme Preview Section ====================
@@ -612,7 +578,7 @@ internal fun ThemePreviewSection(
                     drawLine(
                         color = dividerColor,
                         start = Offset(16.dp.toPx(), 0f),
-                        end = Offset(size.width - 16.dp.toPx(), 0f),
+                        end = Offset(size.width, 0f),
                         strokeWidth = 0.5.dp.toPx()
                     )
                 }
@@ -620,23 +586,16 @@ internal fun ThemePreviewSection(
         }
 
         // ===== 自动开关行 =====
-        Row(modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onAutoToggle(!isAuto) }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(
-                text = "自动",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.W400,
-                color = textPrimary,
-                letterSpacing = (-0.374).sp
-            )
-            LiquidToggle(
-                selected = { isAuto }, onSelect = { onAutoToggle(it) }, backdrop = backdrop
-            )
-        }
+        GlasmioListRow(
+            title = "自动",
+            showTopSeparator = false,
+            onClick = { onAutoToggle(!isAuto) },
+            trailing = {
+                GlasmioSwitch(
+                    checked = isAuto, onCheckedChange = { onAutoToggle(it) }, backdrop = backdrop
+                )
+            }
+        )
     }
 }
 
@@ -841,8 +800,8 @@ private fun FloatingOpacityRow(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
-            GlassSlider(
-                value = { opacity },
+            GlasmioSlider(
+                value = opacity,
                 onValueChange = { newOpacity ->
                     val clamped = newOpacity.coerceIn(0.3f, 1.0f)
                     opacity = clamped
@@ -851,6 +810,7 @@ private fun FloatingOpacityRow(
                     debounceHandler.removeCallbacksAndMessages(null)
                     debounceHandler.postDelayed({ ThemeSettings.updateFloatingWindowOpacity(clamped) }, 150)
                 },
+                valueRange = 0.3f..1f,
                 backdrop = backdrop,
                 modifier = Modifier.fillMaxWidth(0.9f)
             )

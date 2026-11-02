@@ -19,10 +19,10 @@ android {
 
     defaultConfig {
         applicationId = "com.example.autoclicker"
-        minSdk = 26
+        minSdk = 33
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
 
                 testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -43,6 +43,14 @@ android {
     }
 
     buildTypes {
+        // 开发用 debug 包走同一套签名：可以直接覆盖已装的正式包，不用卸载丢数据，编译也快很多
+        debug {
+            signingConfig = if (keystoreProperties.isNotEmpty()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+        }
         release {
             isMinifyEnabled = true
             signingConfig = if (keystoreProperties.isNotEmpty()) {
@@ -82,7 +90,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     // Compose
-    implementation(platform("androidx.compose:compose-bom:2025.05.00"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -93,8 +101,8 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-        // Backdrop (Liquid Glass effects)
-    implementation("io.github.kyant0:backdrop:2.0.0-rc01")
+    // Glasmio — iOS 27 Liquid Glass 组件与材质（本地源码模块，ui 传递 glass/core/icons）
+    implementation("io.github.neoruaa.glasmio:glasmio-ui:0.1.1")
 
     // RubberBand - iOS 式橡皮筋回弹
     implementation("com.github.FanNN-Yb:Rubber-Band:v1")
@@ -106,7 +114,7 @@ dependencies {
     implementation("androidx.startup:startup-runtime:1.2.0")
 
     // Shapes - continuous rounded corner shapes (Capsule)
-    implementation("io.github.kyant0:shapes:1.2.0")
+    implementation("io.github.kyant0:shapes:1.2.1")
 
     // Profile Installer �?pre-compiles hot code paths for faster cold start
     implementation("androidx.profileinstaller:profileinstaller:1.4.0")
